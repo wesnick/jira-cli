@@ -71,6 +71,8 @@ func export(cmd *cobra.Command, args []string) {
 	project := viper.GetString("project.key")
 	client := api.DefaultClient(debug)
 
+	cmdutil.ExitIfError(os.MkdirAll(outputDir, dirPerm))
+
 	var (
 		exported   int
 		downloaded int
@@ -92,11 +94,12 @@ func export(cmd *cobra.Command, args []string) {
 
 		attachments := iss.Fields.Attachment
 
-		md := generateMarkdown(iss, attachments, server)
-
-		if err := os.MkdirAll(outputDir, dirPerm); err != nil {
-			cmdutil.ExitIfError(fmt.Errorf("failed to create directory %s: %w", outputDir, err))
+		var names map[string]string
+		if !noAttachments && len(attachments) > 0 {
+			names = deduplicateFilenames(attachments)
 		}
+
+		md := generateMarkdown(iss, attachments, names, server)
 
 		mdPath := filepath.Join(outputDir, key+".md")
 		if err := os.WriteFile(mdPath, []byte(md), filePerm); err != nil {
@@ -110,8 +113,6 @@ func export(cmd *cobra.Command, args []string) {
 			cmdutil.Success("Exported %s", key)
 			continue
 		}
-
-		names := deduplicateFilenames(attachments)
 
 		for _, att := range attachments {
 			name := names[att.ID]
@@ -168,7 +169,7 @@ func export(cmd *cobra.Command, args []string) {
 	}
 }
 
-func generateMarkdown(iss *jira.Issue, attachments []jira.Attachment, server string) string {
+func generateMarkdown(iss *jira.Issue, attachments []jira.Attachment, names map[string]string, server string) string {
 	var buf strings.Builder
 
 	writeFrontmatter(&buf, iss, server)
@@ -191,7 +192,6 @@ func generateMarkdown(iss *jira.Issue, attachments []jira.Attachment, server str
 	}
 
 	if len(attachments) > 0 {
-		names := deduplicateFilenames(attachments)
 		writeAttachments(&buf, iss.Key, attachments, names)
 	}
 
@@ -245,11 +245,10 @@ func writeFrontmatter(buf *strings.Builder, iss *jira.Issue, server string) {
 }
 
 func yamlEscape(s string) string {
-	if strings.ContainsAny(s, ":{}[]&*?|>!%#`@,") || strings.HasPrefix(s, "'") || strings.HasPrefix(s, "\"") {
-		escaped := strings.ReplaceAll(s, "\"", "\\\"")
-		return fmt.Sprintf("\"%s\"", escaped)
-	}
-	return s
+	escaped := strings.ReplaceAll(s, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	escaped = strings.NewReplacer("\n", `\n`, "\r", `\r`, "\t", `\t`).Replace(escaped)
+	return fmt.Sprintf(`"%s"`, escaped)
 }
 
 func descriptionToMarkdown(desc interface{}) string {
@@ -397,7 +396,7 @@ func deduplicateFilenames(attachments []jira.Attachment) map[string]string {
 			base := strings.TrimSuffix(name, ext)
 			name = fmt.Sprintf("%s-%s%s", base, att.ID, ext)
 		}
-		seen[safeFilename(att.Filename, att.ID)] = true
+		seen[name] = true
 		result[att.ID] = name
 	}
 

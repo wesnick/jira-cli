@@ -32,11 +32,12 @@ func TestGenerateMarkdown_FullIssue(t *testing.T) {
 		{ID: "10002", Filename: "document.pdf", MimeType: "application/pdf"},
 	}
 
-	result := generateMarkdown(iss, attachments, "https://company.atlassian.net")
+	names := deduplicateFilenames(attachments)
+	result := generateMarkdown(iss, attachments, names, "https://company.atlassian.net")
 
 	// Check frontmatter
 	assert.Contains(t, result, "key: ENG-1234")
-	assert.Contains(t, result, "summary: Implement user authentication")
+	assert.Contains(t, result, `summary: "Implement user authentication"`)
 	assert.Contains(t, result, "type: Story")
 	assert.Contains(t, result, "status: In Progress")
 	assert.Contains(t, result, "priority: High")
@@ -72,7 +73,7 @@ func TestGenerateMarkdown_NoDescription(t *testing.T) {
 		},
 	}
 
-	result := generateMarkdown(iss, nil, "https://example.com")
+	result := generateMarkdown(iss, nil, nil, "https://example.com")
 
 	assert.NotContains(t, result, "## Description")
 	assert.NotContains(t, result, "## Attachments")
@@ -100,7 +101,7 @@ func TestGenerateMarkdown_WithSubtasks(t *testing.T) {
 		},
 	}
 
-	result := generateMarkdown(iss, nil, "https://example.com")
+	result := generateMarkdown(iss, nil, nil, "https://example.com")
 
 	assert.Contains(t, result, "## Subtasks")
 	assert.Contains(t, result, "| ENG-2 | Subtask one | High | Done |")
@@ -142,7 +143,7 @@ func TestGenerateMarkdown_WithComments(t *testing.T) {
 		},
 	}
 
-	result := generateMarkdown(iss, nil, "https://example.com")
+	result := generateMarkdown(iss, nil, nil, "https://example.com")
 
 	assert.Contains(t, result, "## Comments")
 	assert.Contains(t, result, "### Jane Smith")
@@ -191,7 +192,7 @@ func TestGenerateMarkdown_WithLinkedIssues(t *testing.T) {
 		},
 	}
 
-	result := generateMarkdown(iss, nil, "https://example.com")
+	result := generateMarkdown(iss, nil, nil, "https://example.com")
 
 	assert.Contains(t, result, "## Linked Issues")
 	assert.Contains(t, result, "**blocks**")
@@ -233,6 +234,21 @@ func TestDeduplicateFilenames(t *testing.T) {
 	assert.Equal(t, "screenshot.png", names["100"])
 	assert.Equal(t, "screenshot-101.png", names["101"])
 	assert.Equal(t, "document.pdf", names["102"])
+
+	// Test that dedup'd names don't collide with real filenames
+	attachments2 := []jira.Attachment{
+		{ID: "100", Filename: "screenshot.png"},
+		{ID: "101", Filename: "screenshot.png"},
+		{ID: "102", Filename: "screenshot-101.png"},
+	}
+
+	names2 := deduplicateFilenames(attachments2)
+	// All three should get distinct names
+	allNames := make(map[string]bool)
+	for _, n := range names2 {
+		allNames[n] = true
+	}
+	assert.Equal(t, 3, len(allNames), "all filenames should be unique")
 }
 
 func TestFormatSize(t *testing.T) {
