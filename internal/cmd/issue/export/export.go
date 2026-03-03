@@ -173,10 +173,12 @@ func export(cmd *cobra.Command, args []string) {
 func generateMarkdown(iss *jira.Issue, attachments []jira.Attachment, names map[string]string, server string) string {
 	var buf strings.Builder
 
+	adfToMD := newADFTranslator(iss.Key, names)
+
 	writeFrontmatter(&buf, iss, server)
 	buf.WriteString(fmt.Sprintf("# %s\n", iss.Fields.Summary))
 
-	if desc := descriptionToMarkdown(iss.Fields.Description); desc != "" {
+	if desc := descriptionToMarkdown(iss.Fields.Description, adfToMD); desc != "" {
 		buf.WriteString(fmt.Sprintf("\n## Description\n\n%s\n", desc))
 	}
 
@@ -189,7 +191,7 @@ func generateMarkdown(iss *jira.Issue, attachments []jira.Attachment, names map[
 	}
 
 	if iss.Fields.Comment.Total > 0 {
-		writeComments(&buf, iss)
+		writeComments(&buf, iss, adfToMD)
 	}
 
 	if len(attachments) > 0 {
@@ -267,12 +269,51 @@ func ifaceToADF(v interface{}) *adf.ADF {
 	return doc
 }
 
-func descriptionToMarkdown(desc interface{}) string {
+func mediaOpenHook(key string, names map[string]string) func(adf.Connector) string {
+	return func(c adf.Connector) string {
+		attrs, ok := c.GetAttributes().(map[string]any)
+		if !ok {
+			return "\n[attachment]"
+		}
+		id, ok := attrs["id"].(string)
+		if !ok {
+			return "\n[attachment]"
+		}
+		name, ok := names[id]
+		if !ok {
+			return "\n[attachment]"
+		}
+		relPath := fmt.Sprintf("attachments/%s/%s", key, name)
+		if isImage(name) {
+			return fmt.Sprintf("\n![%s](%s)", name, relPath)
+		}
+		return fmt.Sprintf("\n[%s](%s)", name, relPath)
+	}
+}
+
+func newADFTranslator(key string, names map[string]string) func(*adf.ADF) string {
+	return func(doc *adf.ADF) string {
+		var opts []adf.MarkdownTranslatorOption
+		if len(names) > 0 {
+			hook := mediaOpenHook(key, names)
+			opts = append(opts, adf.WithMarkdownOpenHooks(
+				map[adf.NodeType]func(adf.Connector) string{
+					adf.NodeMedia:       hook,
+					adf.NodeMediaInline: hook,
+				},
+			))
+		}
+		tr := adf.NewMarkdownTranslator(opts...)
+		return adf.NewTranslator(doc, tr).Translate()
+	}
+}
+
+func descriptionToMarkdown(desc interface{}, adfToMD func(*adf.ADF) string) string {
 	if desc == nil {
 		return ""
 	}
 	if adfNode, ok := desc.(*adf.ADF); ok {
-		return adf.NewTranslator(adfNode, adf.NewMarkdownTranslator()).Translate()
+		return adfToMD(adfNode)
 	}
 	if s, ok := desc.(string); ok {
 		if s == "" {
@@ -281,7 +322,7 @@ func descriptionToMarkdown(desc interface{}) string {
 		return jiraMD.FromJiraMD(s)
 	}
 	if adfNode := ifaceToADF(desc); adfNode != nil {
-		return adf.NewTranslator(adfNode, adf.NewMarkdownTranslator()).Translate()
+		return adfToMD(adfNode)
 	}
 	return ""
 }
@@ -353,7 +394,7 @@ func writeLinkedIssues(buf *strings.Builder, links []struct {
 	}
 }
 
-func writeComments(buf *strings.Builder, iss *jira.Issue) {
+func writeComments(buf *strings.Builder, iss *jira.Issue, adfToMD func(*adf.ADF) string) {
 	buf.WriteString("\n## Comments\n")
 
 	for _, c := range iss.Fields.Comment.Comments {
@@ -367,12 +408,12 @@ func writeComments(buf *strings.Builder, iss *jira.Issue) {
 
 		var body string
 		if adfNode, ok := c.Body.(*adf.ADF); ok {
-			body = adf.NewTranslator(adfNode, adf.NewMarkdownTranslator()).Translate()
+			body = adfToMD(adfNode)
 		} else if s, ok := c.Body.(string); ok {
 			body = jiraMD.FromJiraMD(s)
 		} else if c.Body != nil {
 			if adfNode := ifaceToADF(c.Body); adfNode != nil {
-				body = adf.NewTranslator(adfNode, adf.NewMarkdownTranslator()).Translate()
+				body = adfToMD(adfNode)
 			}
 		}
 		buf.WriteString(body + "\n")

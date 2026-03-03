@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/ankitpokhrel/jira-cli/pkg/adf"
 	"github.com/ankitpokhrel/jira-cli/pkg/jira"
 )
 
@@ -317,4 +318,55 @@ func TestFormatSize(t *testing.T) {
 	assert.Equal(t, "1.5 KB", formatSize(1536))
 	assert.Equal(t, "2.0 MB", formatSize(2*1024*1024))
 	assert.Equal(t, "1.0 GB", formatSize(1024*1024*1024))
+}
+
+func TestGenerateMarkdown_InlineMedia(t *testing.T) {
+	descADF := &adf.ADF{
+		Version: 1,
+		DocType: "doc",
+		Content: []*adf.Node{
+			{
+				NodeType: adf.NodeParagraph,
+				Content: []*adf.Node{
+					{
+						NodeType: adf.ChildNodeText,
+						NodeValue: adf.NodeValue{
+							Text: "See the screenshot below:",
+						},
+					},
+				},
+			},
+			{
+				NodeType: adf.NodeMedia,
+				Attributes: map[string]any{
+					"id":         "abc-123",
+					"type":       "file",
+					"collection": "some-collection",
+				},
+			},
+		},
+	}
+
+	iss := &jira.Issue{
+		Key: "ENG-1",
+		Fields: jira.IssueFields{
+			Summary:     "Issue with inline media",
+			Description: descADF,
+			IssueType:   jira.IssueType{Name: "Bug"},
+			Status:      struct{ Name string `json:"name"` }{Name: "To Do"},
+			Created:     "2024-01-15T10:30:00+0000",
+			Updated:     "2024-01-15T10:30:00+0000",
+		},
+	}
+
+	attachments := []jira.Attachment{
+		{ID: "abc-123", Filename: "screenshot.png", MimeType: "image/png"},
+		{ID: "def-456", Filename: "document.pdf", MimeType: "application/pdf"},
+	}
+
+	names := deduplicateFilenames(attachments)
+	result := generateMarkdown(iss, attachments, names, "https://example.com")
+
+	assert.Contains(t, result, "![screenshot.png](attachments/ENG-1/screenshot.png)")
+	assert.NotContains(t, result, "[attachment]")
 }
