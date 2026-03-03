@@ -23,6 +23,7 @@ const (
 	NodeParagraph   = NodeType("paragraph")
 	NodeTable       = NodeType("table")
 	NodeMedia       = NodeType("media")
+	NodeMediaInline = NodeType("mediaInline")
 
 	ChildNodeText        = NodeType("text")
 	ChildNodeListItem    = NodeType("listItem")
