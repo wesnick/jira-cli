@@ -1,6 +1,7 @@
 package export
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -251,6 +252,21 @@ func yamlEscape(s string) string {
 	return fmt.Sprintf(`"%s"`, escaped)
 }
 
+func ifaceToADF(v interface{}) *adf.ADF {
+	if v == nil {
+		return nil
+	}
+	js, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var doc *adf.ADF
+	if err := json.Unmarshal(js, &doc); err != nil {
+		return nil
+	}
+	return doc
+}
+
 func descriptionToMarkdown(desc interface{}) string {
 	if desc == nil {
 		return ""
@@ -263,6 +279,9 @@ func descriptionToMarkdown(desc interface{}) string {
 			return ""
 		}
 		return jiraMD.FromJiraMD(s)
+	}
+	if adfNode := ifaceToADF(desc); adfNode != nil {
+		return adf.NewTranslator(adfNode, adf.NewMarkdownTranslator()).Translate()
 	}
 	return ""
 }
@@ -351,6 +370,10 @@ func writeComments(buf *strings.Builder, iss *jira.Issue) {
 			body = adf.NewTranslator(adfNode, adf.NewMarkdownTranslator()).Translate()
 		} else if s, ok := c.Body.(string); ok {
 			body = jiraMD.FromJiraMD(s)
+		} else if c.Body != nil {
+			if adfNode := ifaceToADF(c.Body); adfNode != nil {
+				body = adf.NewTranslator(adfNode, adf.NewMarkdownTranslator()).Translate()
+			}
 		}
 		buf.WriteString(body + "\n")
 	}

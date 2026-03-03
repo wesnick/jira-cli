@@ -251,6 +251,67 @@ func TestDeduplicateFilenames(t *testing.T) {
 	assert.Equal(t, 3, len(allNames), "all filenames should be unique")
 }
 
+func TestWriteComments_ADFBody(t *testing.T) {
+	// Simulate what happens when GetIssue returns comment bodies as raw
+	// map[string]interface{} (the common case when no comment limit filter is passed).
+	rawADFBody := map[string]interface{}{
+		"version": float64(1),
+		"type":    "doc",
+		"content": []interface{}{
+			map[string]interface{}{
+				"type": "paragraph",
+				"content": []interface{}{
+					map[string]interface{}{
+						"type": "text",
+						"text": "This is the comment text.",
+					},
+				},
+			},
+		},
+	}
+
+	iss := &jira.Issue{
+		Key: "ENG-1",
+		Fields: jira.IssueFields{
+			Summary:   "Issue with ADF comments",
+			IssueType: jira.IssueType{Name: "Bug"},
+			Status:    struct{ Name string `json:"name"` }{Name: "To Do"},
+			Created:   "2024-01-15T10:30:00+0000",
+			Updated:   "2024-01-15T10:30:00+0000",
+			Comment: struct {
+				Comments []struct {
+					ID      string      `json:"id"`
+					Author  jira.User   `json:"author"`
+					Body    interface{} `json:"body"`
+					Created string      `json:"created"`
+				} `json:"comments"`
+				Total int `json:"total"`
+			}{
+				Comments: []struct {
+					ID      string      `json:"id"`
+					Author  jira.User   `json:"author"`
+					Body    interface{} `json:"body"`
+					Created string      `json:"created"`
+				}{
+					{
+						ID:      "1",
+						Author:  jira.User{DisplayName: "Jane Smith"},
+						Body:    rawADFBody,
+						Created: "2024-01-16T09:00:00+0000",
+					},
+				},
+				Total: 1,
+			},
+		},
+	}
+
+	result := generateMarkdown(iss, nil, nil, "https://example.com")
+
+	assert.Contains(t, result, "## Comments")
+	assert.Contains(t, result, "### Jane Smith")
+	assert.Contains(t, result, "This is the comment text.")
+}
+
 func TestFormatSize(t *testing.T) {
 	assert.Equal(t, "500 B", formatSize(500))
 	assert.Equal(t, "1.5 KB", formatSize(1536))
