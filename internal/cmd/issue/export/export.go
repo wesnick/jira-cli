@@ -462,7 +462,11 @@ func deduplicateFilenames(attachments []jira.Attachment) map[string]string {
 		if seen[name] {
 			ext := filepath.Ext(name)
 			base := strings.TrimSuffix(name, ext)
-			name = fmt.Sprintf("%s-%s%s", base, att.ID, ext)
+			candidate := fmt.Sprintf("%s-%s%s", base, att.ID, ext)
+			for i := 1; seen[candidate]; i++ {
+				candidate = fmt.Sprintf("%s-%s-%d%s", base, att.ID, i, ext)
+			}
+			name = candidate
 		}
 		seen[name] = true
 		result[att.ID] = name

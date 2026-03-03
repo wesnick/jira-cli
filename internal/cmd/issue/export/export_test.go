@@ -252,6 +252,34 @@ func TestDeduplicateFilenames(t *testing.T) {
 	assert.Equal(t, 3, len(allNames), "all filenames should be unique")
 }
 
+func TestDeduplicateFilenames_RenameCollision(t *testing.T) {
+	// The organic name "file-101.png" appears BEFORE the duplicate that would
+	// be renamed to "file-101.png".  The rename must detect this collision.
+	attachments := []jira.Attachment{
+		{ID: "100", Filename: "file.png"},
+		{ID: "102", Filename: "file-101.png"}, // organic name processed second
+		{ID: "101", Filename: "file.png"},      // duplicate renamed to file-101.png → collides!
+	}
+
+	names := deduplicateFilenames(attachments)
+
+	// All three must be unique
+	seen := make(map[string]bool)
+	for _, n := range names {
+		assert.False(t, seen[n], "duplicate filename: %s", n)
+		seen[n] = true
+	}
+	assert.Equal(t, 3, len(seen))
+
+	// First file keeps original name
+	assert.Equal(t, "file.png", names["100"])
+	// Second file keeps its organic name
+	assert.Equal(t, "file-101.png", names["102"])
+	// Third file: its dedup'd name (file-101.png) collides with the organic name,
+	// so it must get a different name
+	assert.NotEqual(t, "file-101.png", names["101"], "should not collide with organic name from ID 102")
+}
+
 func TestWriteComments_ADFBody(t *testing.T) {
 	// Simulate what happens when GetIssue returns comment bodies as raw
 	// map[string]interface{} (the common case when no comment limit filter is passed).
