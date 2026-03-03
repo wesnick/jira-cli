@@ -177,7 +177,14 @@ func generateMarkdown(iss *jira.Issue, attachments []jira.Attachment, names map[
 		names = deduplicateFilenames(attachments)
 	}
 
-	adfToMD := newADFTranslator(iss.Key, names)
+	filenameMap := make(map[string]string, len(attachments))
+	for _, att := range attachments {
+		if _, exists := filenameMap[att.Filename]; !exists {
+			filenameMap[att.Filename] = names[att.ID]
+		}
+	}
+
+	adfToMD := newADFTranslator(iss.Key, filenameMap)
 
 	writeFrontmatter(&buf, iss, server)
 	buf.WriteString(fmt.Sprintf("# %s\n", iss.Fields.Summary))
@@ -273,18 +280,18 @@ func ifaceToADF(v interface{}) *adf.ADF {
 	return doc
 }
 
-func mediaOpenHook(key string, names map[string]string) func(adf.Connector) string {
+func mediaOpenHook(key string, filenameMap map[string]string) func(adf.Connector) string {
 	return func(c adf.Connector) string {
 		attrs, ok := c.GetAttributes().(map[string]any)
 		if !ok {
 			return "\n[attachment]"
 		}
-		id, ok := attrs["id"].(string)
-		if !ok {
-			return "\n[attachment]"
+		alt, _ := attrs["alt"].(string)
+		name, ok := filenameMap[alt]
+		if !ok && alt != "" {
+			name = alt // use alt text directly as fallback
 		}
-		name, ok := names[id]
-		if !ok {
+		if name == "" {
 			return "\n[attachment]"
 		}
 		relPath := fmt.Sprintf("attachments/%s/%s", key, name)
@@ -295,11 +302,11 @@ func mediaOpenHook(key string, names map[string]string) func(adf.Connector) stri
 	}
 }
 
-func newADFTranslator(key string, names map[string]string) func(*adf.ADF) string {
+func newADFTranslator(key string, filenameMap map[string]string) func(*adf.ADF) string {
 	return func(doc *adf.ADF) string {
 		var opts []adf.MarkdownTranslatorOption
-		if len(names) > 0 {
-			hook := mediaOpenHook(key, names)
+		if len(filenameMap) > 0 {
+			hook := mediaOpenHook(key, filenameMap)
 			opts = append(opts, adf.WithMarkdownOpenHooks(
 				map[adf.NodeType]func(adf.Connector) string{
 					adf.NodeMedia:       hook,

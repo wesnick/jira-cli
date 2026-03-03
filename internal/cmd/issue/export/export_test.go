@@ -393,9 +393,10 @@ func TestGenerateMarkdown_InlineMedia(t *testing.T) {
 			{
 				NodeType: adf.NodeMedia,
 				Attributes: map[string]any{
-					"id":         "abc-123",
+					"id":         "79e602c3-cf64-4890-b6de-2c36a9008633",
 					"type":       "file",
 					"collection": "some-collection",
+					"alt":        "screenshot.png",
 				},
 			},
 		},
@@ -414,8 +415,8 @@ func TestGenerateMarkdown_InlineMedia(t *testing.T) {
 	}
 
 	attachments := []jira.Attachment{
-		{ID: "abc-123", Filename: "screenshot.png", MimeType: "image/png"},
-		{ID: "def-456", Filename: "document.pdf", MimeType: "application/pdf"},
+		{ID: "25656", Filename: "screenshot.png", MimeType: "image/png"},
+		{ID: "22991", Filename: "document.pdf", MimeType: "application/pdf"},
 	}
 
 	names := deduplicateFilenames(attachments)
