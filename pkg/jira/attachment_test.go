@@ -43,7 +43,8 @@ func TestGetIssueAttachments(t *testing.T) {
 	unexpectedStatusCode = true
 
 	_, err = client.GetIssueAttachments("TEST-1")
-	assert.Error(t, &ErrUnexpectedResponse{}, err)
+	var target *ErrUnexpectedResponse
+	assert.ErrorAs(t, err, &target)
 }
 
 func TestGetIssueAttachmentsV2(t *testing.T) {
