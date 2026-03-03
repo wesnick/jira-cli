@@ -96,7 +96,7 @@ func export(cmd *cobra.Command, args []string) {
 		attachments := iss.Fields.Attachment
 
 		var names map[string]string
-		if !noAttachments && len(attachments) > 0 {
+		if len(attachments) > 0 {
 			names = deduplicateFilenames(attachments)
 		}
 
@@ -172,6 +172,10 @@ func export(cmd *cobra.Command, args []string) {
 
 func generateMarkdown(iss *jira.Issue, attachments []jira.Attachment, names map[string]string, server string) string {
 	var buf strings.Builder
+
+	if names == nil && len(attachments) > 0 {
+		names = deduplicateFilenames(attachments)
+	}
 
 	adfToMD := newADFTranslator(iss.Key, names)
 

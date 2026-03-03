@@ -320,6 +320,32 @@ func TestFormatSize(t *testing.T) {
 	assert.Equal(t, "1.0 GB", formatSize(1024*1024*1024))
 }
 
+func TestGenerateMarkdown_AttachmentNamesAlwaysResolved(t *testing.T) {
+	// Even when names would normally be nil (--no-attachments mode),
+	// generateMarkdown should still render filenames in the Attachments section.
+	iss := &jira.Issue{
+		Key: "ENG-1",
+		Fields: jira.IssueFields{
+			Summary:   "Issue",
+			IssueType: jira.IssueType{Name: "Bug"},
+			Status:    struct{ Name string `json:"name"` }{Name: "To Do"},
+			Created:   "2024-01-15T10:30:00+0000",
+			Updated:   "2024-01-15T10:30:00+0000",
+		},
+	}
+
+	attachments := []jira.Attachment{
+		{ID: "100", Filename: "screenshot.png"},
+	}
+
+	// Pass nil names map (simulating --no-attachments where names was not computed)
+	result := generateMarkdown(iss, attachments, nil, "https://example.com")
+
+	// Should still show the filename, not an empty link
+	assert.Contains(t, result, "screenshot.png")
+	assert.NotContains(t, result, "![](")
+}
+
 func TestGenerateMarkdown_InlineMedia(t *testing.T) {
 	descADF := &adf.ADF{
 		Version: 1,
